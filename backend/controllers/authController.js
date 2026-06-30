@@ -1,5 +1,6 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
+import fetch from 'node-fetch';
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'secret_fallback_key', {
@@ -111,6 +112,63 @@ export const updateUserProfile = async (req, res, next) => {
         location: updatedUser.location,
         skills: updatedUser.skills,
         projects: updatedUser.projects
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Verify Google access token & authenticate user
+ * @route   POST /api/auth/google
+ */
+export const googleLogin = async (req, res, next) => {
+  const { accessToken } = req.body;
+  try {
+    if (!accessToken) {
+      return res.status(400).json({ success: false, message: 'Google access token is missing.' });
+    }
+
+    // Verify token by calling Google userinfo endpoint
+    const googleResponse = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`);
+    if (!googleResponse.ok) {
+      return res.status(401).json({ success: false, message: 'Invalid Google access token.' });
+    }
+
+    const googleUser = await googleResponse.json();
+    const { email, name } = googleUser;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Google account does not provide email.' });
+    }
+
+    // Find or create user
+    let user = await User.findOne({ email });
+    if (!user) {
+      // Create user with a secure random password since schema requires one
+      const randomPassword = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      user = await User.create({
+        name: name || email.split('@')[0],
+        email,
+        password: randomPassword,
+        skills: [],
+        projects: []
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      token: generateToken(user._id),
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        degree: user.degree,
+        college: user.college,
+        location: user.location,
+        skills: user.skills,
+        projects: user.projects
       }
     });
   } catch (error) {

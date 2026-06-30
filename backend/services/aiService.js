@@ -5,7 +5,7 @@ import fetch from 'node-fetch';
 import Interview from '../models/Interview.js';
 import User from '../models/User.js';
 
-const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
+const AI_MODEL = process.env.AI_MODEL || 'gemini-1.5-flash';
 
 /**
  * Generic function to call the LLM with a system and user prompt
@@ -14,24 +14,32 @@ const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
  * @returns {Promise<string>} - Model generated text
  */
 export async function callLLM(systemPrompt, userPrompt) {
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY not configured');
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY or OPENAI_API_KEY not configured');
   }
   const payload = {
-    model: AI_MODEL,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
+    contents: [
+      {
+        parts: [
+          { text: userPrompt }
+        ]
+      }
     ],
-    temperature: 0.7,
-    max_tokens: 1000
+    systemInstruction: {
+      parts: [
+        { text: systemPrompt }
+      ]
+    },
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1000
+    }
   };
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_API_KEY}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify(payload)
   });
@@ -40,7 +48,11 @@ export async function callLLM(systemPrompt, userPrompt) {
     throw new Error(`LLM request failed: ${response.status} ${err}`);
   }
   const data = await response.json();
-  return data.choices[0].message.content.trim();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error("Empty response from Gemini API");
+  }
+  return text.trim();
 }
 
 /**

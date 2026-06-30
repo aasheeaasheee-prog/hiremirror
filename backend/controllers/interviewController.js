@@ -214,7 +214,8 @@ export const generateQuestions = async (req, res, next) => {
   };
 
   // Try LLM call if API key exists and fallback is not explicitly requested
-  if (process.env.OPENAI_API_KEY && !isFallback) {
+  const hasApiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+  if (hasApiKey && !isFallback) {
     try {
       const systemPrompt = `You are an expert AI interview coach. Generate exactly ${limit} unique, highly realistic interview questions for a candidate.`;
       const userPrompt = prompts.generateQuestions(category, role, difficulty, limit);
